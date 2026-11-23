@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.work.WorkManager
 import com.example.cryptoexchange.presentation.CryptoExchangeRoute
 import com.example.cryptoexchange.presentation.CryptoViewModel
 import com.example.cryptoexchange.ui.theme.CryptoExchangeTheme
@@ -15,21 +14,17 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        val app = application as CryptoExchangeApplication
-        val container = app.container
-        val workManager = WorkManager.getInstance(applicationContext)
+        val appContainer = (application as CryptoExchangeApplication).container
 
         setContent {
             CryptoExchangeTheme {
-                val viewModel: CryptoViewModel = viewModel(
+                val vm: CryptoViewModel = viewModel(
                     factory = CryptoViewModel.Factory(
-                        observeCryptocurrenciesUseCase = container.observeCryptocurrenciesUseCase,
-                        syncScheduler = container.cryptoSyncScheduler,
-                        workManager = workManager
+                        observeCryptocurrenciesUseCase = appContainer.observeCryptocurrenciesUseCase,
+                        syncManager = appContainer.cryptoSyncManager
                     )
                 )
-
-                CryptoExchangeRoute(viewModel = viewModel)
+                CryptoExchangeRoute(viewModel = vm)
             }
         }
     }

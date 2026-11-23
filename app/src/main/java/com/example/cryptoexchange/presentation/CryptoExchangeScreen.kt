@@ -30,6 +30,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import com.example.cryptoexchange.domain.model.CryptoCurrency
+import com.example.cryptoexchange.domain.model.SyncStatus
 
 @Composable
 fun CryptoExchangeRoute(
@@ -62,6 +66,8 @@ fun CryptoExchangeScreen(
     onRefreshClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isActionDisabled = uiState.isLoading || uiState.isManualSyncActive || uiState.syncState == SyncStatus.RUNNING
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -76,10 +82,10 @@ fun CryptoExchangeScreen(
                 actions = {
                     Button(
                         onClick = onRefreshClick,
-                        enabled = !uiState.isLoading && !uiState.isManualSyncActive,
+                        enabled = !isActionDisabled,
                         modifier = Modifier.padding(end = 12.dp)
                     ) {
-                        if (uiState.isLoading || uiState.isManualSyncActive) {
+                        if (isActionDisabled) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(16.dp),
                                 strokeWidth = 2.dp
@@ -140,7 +146,9 @@ fun CryptoExchangeScreen(
 
                 else -> {
                     EmptyOrErrorState(
+                        syncState = uiState.syncState,
                         errorMessage = uiState.errorMessage,
+                        isRetryEnabled = !isActionDisabled,
                         onRetryClick = onRefreshClick,
                         modifier = Modifier
                             .fillMaxSize()
@@ -154,7 +162,7 @@ fun CryptoExchangeScreen(
 
 @Composable
 private fun SyncStatusBanner(
-    syncState: SyncUiState,
+    syncState: SyncStatus,
     isLoading: Boolean,
     lastUpdatedText: String,
     errorMessage: String?,
@@ -198,7 +206,7 @@ private fun SyncStatusBanner(
                 }
             }
 
-            if (isLoading) {
+            if (isLoading || syncState == SyncStatus.RUNNING) {
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
@@ -290,17 +298,22 @@ private fun CryptoLogo(
     if (cleanUrl == null) {
         LogoPlaceholder(modifier = modifier)
     } else {
-        AsyncImage(
-            model = cleanUrl,
-            contentDescription = contentDescription,
-            contentScale = ContentScale.Crop,
-            placeholder = null,
-            error = null,
-            modifier = modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.secondaryContainer)
-        )
+        var isImageError by remember(cleanUrl) { mutableStateOf(false) }
+
+        if (isImageError) {
+            LogoPlaceholder(modifier = modifier)
+        } else {
+            AsyncImage(
+                model = cleanUrl,
+                contentDescription = contentDescription,
+                contentScale = ContentScale.Crop,
+                onError = { isImageError = true },
+                modifier = modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.secondaryContainer)
+            )
+        }
     }
 }
 
@@ -324,7 +337,9 @@ private fun LogoPlaceholder(modifier: Modifier = Modifier) {
 
 @Composable
 private fun EmptyOrErrorState(
+    syncState: SyncStatus,
     errorMessage: String?,
+    isRetryEnabled: Boolean,
     onRetryClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -334,24 +349,27 @@ private fun EmptyOrErrorState(
         verticalArrangement = Arrangement.Center
     ) {
         Text(
-            text = if (!errorMessage.isNullOrBlank()) {
-                errorMessage
-            } else {
-                "Дані про криптовалюти ще не завантажені"
+            text = when {
+                !errorMessage.isNullOrBlank() -> errorMessage
+                syncState == SyncStatus.ENQUEUED -> "Немає підключення до мережі. Дані оновляться автоматично, коли з'явиться інтернет."
+                else -> "Дані про криптовалюти ще не завантажені"
             },
             style = MaterialTheme.typography.bodyLarge
         )
         Spacer(modifier = Modifier.height(14.dp))
-        Button(onClick = onRetryClick) {
+        Button(
+            onClick = onRetryClick,
+            enabled = isRetryEnabled
+        ) {
             Text(text = "Спробувати оновити")
         }
     }
 }
 
-private fun SyncUiState.label(): String = when (this) {
-    SyncUiState.IDLE -> "Очікування"
-    SyncUiState.ENQUEUED -> "У черзі (очікування мережі)"
-    SyncUiState.RUNNING -> "Оновлення..."
-    SyncUiState.SUCCEEDED -> "Оновлено"
-    SyncUiState.FAILED -> "Помилка"
+private fun SyncStatus.label(): String = when (this) {
+    SyncStatus.IDLE -> "Очікування"
+    SyncStatus.ENQUEUED -> "У черзі (очікування мережі)"
+    SyncStatus.RUNNING -> "Оновлення..."
+    SyncStatus.SUCCEEDED -> "Оновлено"
+    SyncStatus.FAILED -> "Помилка"
 }
